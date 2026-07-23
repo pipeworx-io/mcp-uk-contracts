@@ -32,6 +32,10 @@ interface McpToolExport {
 
 
 const BASE = 'https://www.contractsfinder.service.gov.uk';
+// Find a Tender Service (FTS) — the UK's HIGH-VALUE / above-threshold tender
+// portal (post-Brexit replacement for EU TED). Same OCDS format as Contracts
+// Finder, keyless, but a date-ordered FEED (no server-side keyword search).
+const FTS_BASE = 'https://www.find-tender.service.gov.uk/api/1.0/ocdsReleasePackages';
 const UA = 'pipeworx/1.0 (+https://pipeworx.io)';
 
 const tools: McpToolExport['tools'] = [
@@ -102,6 +106,32 @@ const tools: McpToolExport['tools'] = [
       },
     },
   },
+  {
+    name: 'find_a_tender_recent',
+    description:
+      'Recent HIGH-VALUE UK government tenders and contract awards from the Find a Tender Service (find-tender.service.gov.uk) — the UK\'s above-threshold procurement portal (the post-Brexit replacement for EU TED, for larger public contracts). Use for "high value UK tenders", "above threshold UK government contracts", "Find a Tender notices", "large UK public sector contract opportunities". Returns recent notices newest-first; an optional keyword filters them by title/description (client-side, since the FTS feed has no server search). For lower-value / general UK notices use search_notices (Contracts Finder). Keyless.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        keyword: { type: 'string', description: 'Optional keyword to filter recent notices by title/description, e.g. "cloud", "construction". Omit to list all recent.' },
+        stage: { type: 'string', enum: ['tender', 'award', 'planning'], description: 'Notice stage: "tender" (open opportunities, default), "award" (results), or "planning".' },
+        days: { type: 'number', description: 'How many days back to scan, 1–30 (default 7).' },
+        limit: { type: 'number', description: 'Max notices to return, 1–100 (default 20).' },
+      },
+    },
+  },
+  {
+    name: 'find_a_tender_notice',
+    description:
+      'Full detail for one Find a Tender Service (high-value UK) notice by its OCID (e.g. "ocds-h6vhtk-06d27d", from find_a_tender_recent results). Returns title, buyer, description, CPV classification, value, deadlines, and documents. Keyless.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        ocid: { type: 'string', description: 'The notice OCID, e.g. "ocds-h6vhtk-06d27d". Get these from find_a_tender_recent.' },
+      },
+      required: ['ocid'],
+    },
+  },
 ];
 
 async function callTool(name: string, args: Record<string, unknown>): Promise<unknown> {
@@ -113,6 +143,10 @@ async function callTool(name: string, args: Record<string, unknown>): Promise<un
         return getNotice(args);
       case 'recent_notices':
         return recentNotices(args);
+      case 'find_a_tender_recent':
+        return findATenderRecent(args);
+      case 'find_a_tender_notice':
+        return findATenderNotice(args);
       default:
         return { error: `Unknown tool: ${name}` };
     }
@@ -299,6 +333,73 @@ async function getNotice(args: Record<string, unknown>): Promise<unknown> {
       contract_period: a.contractPeriod ?? null,
     })),
     url: doc?.url ?? null,
+  };
+}
+
+// ---- Find a Tender Service (FTS) -----------------------------------------
+
+async function findATenderRecent(args: Record<string, unknown>): Promise<unknown> {
+  const keyword = String(args.keyword ?? '').trim().toLowerCase();
+  const stage = ['tender', 'award', 'planning'].includes(String(args.stage))
+    ? String(args.stage)
+    : 'tender';
+  const days = Math.min(Math.max(Number(args.days) || 7, 1), 30);
+  const limit = Math.min(Math.max(Number(args.limit) || 20, 1), 100);
+  const from = new Date(Date.now() - days * 86400000).toISOString().replace(/\.\d{3}Z$/, 'Z');
+
+  // FTS is a date-ordered feed with `next` cursor pagination; walk pages until
+  // we have enough matches or hit a page cap (keeps it bounded when filtering).
+  let url = `${FTS_BASE}?stages=${stage}&updatedFrom=${encodeURIComponent(from)}`;
+  const out: Record<string, unknown>[] = [];
+  let scanned = 0;
+  for (let page = 0; page < 6 && out.length < limit; page++) {
+    const res = await getJson(url);
+    if (!res.ok) return { source: 'Find a Tender Service (UK)', error: res.error };
+    const pkg = res.data as { releases?: Release[]; links?: { next?: string } };
+    const releases = pkg.releases ?? [];
+    scanned += releases.length;
+    for (const r of releases) {
+      if (out.length >= limit) break;
+      if (keyword) {
+        const hay = `${(r.tender?.title ?? '')} ${(r.tender?.description ?? '')}`.toLowerCase();
+        if (!hay.includes(keyword)) continue;
+      }
+      out.push(compactRelease(r));
+    }
+    if (!pkg.links?.next || releases.length === 0) break;
+    url = pkg.links.next;
+  }
+  return {
+    source: 'Find a Tender Service — high-value UK government procurement (find-tender.service.gov.uk)',
+    stage,
+    days,
+    keyword: keyword || undefined,
+    scanned,
+    count: out.length,
+    note: keyword
+      ? `Keyword "${keyword}" filtered client-side over the last ${days} days of FTS notices (the FTS feed has no server-side search). Widen days or drop the keyword for more.`
+      : undefined,
+    notices: out,
+  };
+}
+
+async function findATenderNotice(args: Record<string, unknown>): Promise<unknown> {
+  const ocid = String(args.ocid ?? args.id ?? '').trim();
+  if (!ocid) return { error: 'find_a_tender_notice requires an "ocid" (e.g. "ocds-h6vhtk-06d27d") from find_a_tender_recent.' };
+  const res = await getJson(`${FTS_BASE}/${encodeURIComponent(ocid)}`);
+  if (!res.ok) return { source: 'Find a Tender Service (UK)', ocid, error: res.error === 'not found' ? `No FTS notice with OCID "${ocid}".` : res.error };
+  const pkg = res.data as { releases?: Release[] };
+  const r = pkg.releases?.[0];
+  if (!r) return { source: 'Find a Tender Service (UK)', ocid, error: 'notice package had no release' };
+  const tender = (r.tender ?? {}) as Record<string, any>;
+  return {
+    source: 'Find a Tender Service — high-value UK government procurement (find-tender.service.gov.uk)',
+    ...compactRelease(r),
+    cpv: tender.classification?.description ?? tender.classification?.id ?? null,
+    category: tender.mainProcurementCategory ?? null,
+    documents: Array.isArray(tender.documents)
+      ? tender.documents.slice(0, 10).map((d: any) => ({ title: d.title ?? null, url: d.url ?? null }))
+      : [],
   };
 }
 
