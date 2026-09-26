@@ -1,6 +1,6 @@
 {
   "name": "@pipeworx/mcp-uk-contracts",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "UK Contracts Finder MCP.",
   "type": "module",
   "main": "src/index.ts",
@@ -26,7 +26,7 @@
     "@cloudflare/workers-types": "^4.20260405.1"
   },
   "pipeworx": {
-    "sourceHash": "v1-2cce9e61977489d1470ff0a041e5ef3cc0b412264a3b8117259ea4fa9b89a725",
-    "sourceCommit": "b0fb3c31386cf0256dcf1e2f1b3440435a87ec35"
+    "sourceHash": "v1-66f267fd97375e603dd047743a1721d4d9b37aaf87221d958bfaa7fb5245627b",
+    "sourceCommit": "66a0692f029179984440cef6938cba7fdd41d66d"
   }
 }
