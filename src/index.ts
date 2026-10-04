@@ -822,7 +822,7 @@ const tools: McpToolExport['tools'] = [
       properties: {
         keyword: { type: 'string', description: 'Optional keyword to filter recent notices by title/description, e.g. "cloud", "construction". Omit to list all recent.' },
         stage: { type: 'string', enum: ['tender', 'award', 'planning'], description: 'Notice stage: "tender" (open opportunities, default), "award" (results), or "planning".' },
-        days: { type: 'number', description: 'How many days back to scan, 1–30 (default 7).' },
+        days: { type: 'number', description: 'How many days back to scan, 1–30. Default 7 when listing, 30 when a keyword is given (the 7-day feed is only ~30 notices, too few for a keyword to match).' },
         limit: { type: 'number', description: 'Max notices to return, 1–100 (default 20).' },
       },
     },
@@ -1270,7 +1270,16 @@ async function findATenderRecent(args: Record<string, unknown>): Promise<unknown
   const stage = ['tender', 'award', 'planning'].includes(String(args.stage))
     ? String(args.stage)
     : 'tender';
-  const days = Math.min(Math.max(Number(args.days) || 7, 1), 30);
+  // Default window: 7 days to LIST recent notices, 30 days when a keyword is
+  // being matched. The 7-day high-value tender feed is only ~30 notices, so a
+  // client-side keyword over it is nearly always an honest zero — measured
+  // 2026-10-04: keyword "software", days=7 → scanned 32, count 0, window
+  // complete; one paying caller hit 14 empties and 0 successes this way in a
+  // week. The 30-day tender feed is ~180 notices in 2 pages, well inside the
+  // FTS rate budget, so widening the default costs nothing and finds things.
+  const daysRequested = Number(args.days);
+  const defaultDays = String(args.keyword ?? '').trim() ? 30 : 7;
+  const days = Math.min(Math.max(daysRequested || defaultDays, 1), 30);
   const limit = Math.min(Math.max(Number(args.limit) || 20, 1), 100);
   const from = new Date(Date.now() - days * 86400000).toISOString().replace(/\.\d{3}Z$/, 'Z');
 
@@ -1366,6 +1375,14 @@ async function findATenderRecent(args: Record<string, unknown>): Promise<unknown
       : keyword
         ? `Examined all ${scanned} FTS notices in the last ${days} days and matched "${keyword}" client-side (FTS has no server-side text search — its API rejects a keyword parameter, listing stages/limit/cursor/updatedFrom/updatedTo as the only ones allowed). The window was fully scanned, so this count is authoritative for it.`
         : undefined,
+    ...(keyword && out.length === 0
+      ? {
+          hint:
+            `Zero high-value (above-threshold) ${stage} notices mentioned "${keyword}" in the last ${days} days — FTS carries only ~${Math.max(scanned, 1)} notices for that window, so a niche term is usually absent from it. ` +
+            `For a real full-text search of UK procurement across all values use search_notices (Contracts Finder) with keyword "${keyword}"${stage === 'tender' ? ' and status "any" or "awarded"' : ''}; ` +
+            `to keep looking here, try stage "award" or widen days to 30.`,
+        }
+      : {}),
     notices: out,
   };
 }
