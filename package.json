@@ -1,12 +1,20 @@
 {
   "name": "@pipeworx/mcp-uk-contracts",
-  "version": "0.1.4",
+  "version": "0.2.0",
   "description": "UK Contracts Finder MCP.",
   "type": "module",
-  "main": "src/index.ts",
-  "types": "src/index.ts",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./tools.json": "./tools.json",
+    "./package.json": "./package.json"
+  },
   "bin": {
     "mcp-uk-contracts": "bin/cli.js"
+  },
+  "files": ["bin/", "lib/", "tools.json", "server.json"],
+  "engines": {
+    "node": ">=18"
   },
   "keywords": ["mcp", "mcp-server", "model-context-protocol", "pipeworx", "uk-contracts"],
   "license": "MIT",
@@ -14,19 +22,12 @@
     "type": "git",
     "url": "git+https://github.com/pipeworx-io/mcp-uk-contracts.git"
   },
-  "scripts": {
-    "typecheck": "tsc --noEmit"
-  },
-  "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.30.0",
-    "tsx": "^4.19.0"
-  },
-  "devDependencies": {
-    "typescript": "^5.9.3",
-    "@cloudflare/workers-types": "^4.20260405.1"
-  },
+  "mcpName": "io.github.pipeworx-io/uk-contracts",
   "pipeworx": {
-    "sourceHash": "v1-03d795111bcde293e504a62c54016df37a1e8040677b7db4f6b8405251c2132a",
-    "sourceCommit": "db8abcadb39ab9d5eeb65d32388800b63d3b3d7a"
+    "mode": "gateway",
+    "slug": "uk-contracts",
+    "gatewaySlug": "uk-contracts",
+    "sourceHash": "v1-fa2a1ffb0899e55d0fb690e437eb34ce8d23ea88ac2675371440951645950384",
+    "sourceCommit": "f47d581679e1e887373df51ba623f891fbe4c464"
   }
 }
