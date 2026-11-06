@@ -1,6 +1,6 @@
 {
   "name": "@pipeworx/mcp-uk-contracts",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "UK Contracts Finder MCP.",
   "type": "module",
   "main": "lib/index.js",
@@ -27,7 +27,7 @@
     "mode": "gateway",
     "slug": "uk-contracts",
     "gatewaySlug": "uk-contracts",
-    "sourceHash": "v1-fa2a1ffb0899e55d0fb690e437eb34ce8d23ea88ac2675371440951645950384",
-    "sourceCommit": "f47d581679e1e887373df51ba623f891fbe4c464"
+    "sourceHash": "v1-f79d450fc6f498dae0d1fb8095dc943b7fba8ec69d39ad7f347e505a84d81d80",
+    "sourceCommit": "ca52e7ed1e1ccad897c2da1b0fa105edc0bc3b2e"
   }
 }
